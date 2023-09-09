@@ -1,14 +1,15 @@
 import { ProList } from '@ant-design/pro-components';
-import { Button, Space, Tag } from 'antd';
+import { Button, DatePickerProps, Modal, Space, Tag, TimePicker } from 'antd';
 import type { Key } from 'react';
 import { useState } from 'react';
-import { Timeline } from 'antd';
+import { Timeline, DatePicker } from 'antd';
 import { Form, Input } from 'antd';
-import { EnvironmentOutlined, SmileOutlined, SendOutlined } from '@ant-design/icons';
+import { EnvironmentOutlined, SmileOutlined, SendOutlined, ClockCircleTwoTone, ClockCircleOutlined } from '@ant-design/icons';
 import { Row, Col } from 'antd';
 import MomentUtil from 'moment';
 import { Store } from 'antd/lib/form/interface';
-
+import dayjs from 'dayjs';
+import { TimePickerProps } from 'antd/lib';
 
 
 interface MomentItem{
@@ -82,6 +83,8 @@ interface CreateFunction {
 
 const MomentForm = ({onCreated}: {onCreated: CreateFunction}) => {
   const [form] = Form.useForm();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const onFinish = (values: Store) => {
     console.log('Received values:', values);
     const time = MomentUtil(new Date().getTime());
@@ -104,6 +107,26 @@ const MomentForm = ({onCreated}: {onCreated: CreateFunction}) => {
     form.setFieldValue("content", "");
   };
 
+  const onDateChange: DatePickerProps['onChange'] = (date, dateString) => {
+    console.log(date, dateString);
+  };
+
+  const onTimeChange: TimePickerProps['onChange'] = (date, dateString) => {
+    console.log(date, dateString);
+  };
+
+  const showModal = () => {
+    setIsModalOpen(true);
+  };
+
+  const handleOk = () => {
+    setIsModalOpen(false);
+  };
+
+  const handleCancel = () => {
+    setIsModalOpen(false);
+  };
+
   return (
     <Form
       name="MomentForm"
@@ -124,6 +147,14 @@ const MomentForm = ({onCreated}: {onCreated: CreateFunction}) => {
         <Row justify="space-between">
           <Col span={10}>
             <Space>
+            <Button icon={<ClockCircleOutlined />} onClick={showModal} />
+            <Modal title="事件事件" open={isModalOpen} 
+              onOk={handleOk} onCancel={handleCancel} centered={false}>
+              <Space>
+                <DatePicker onChange={onDateChange} />
+                <TimePicker onChange={onTimeChange} />
+              </Space>
+            </Modal>
             <Button type="primary" icon={<EnvironmentOutlined />} />
             <Button icon={<SmileOutlined />} />
             </Space>
@@ -141,11 +172,10 @@ const MomentForm = ({onCreated}: {onCreated: CreateFunction}) => {
 const MomentTimeline = (
   {moments}: {moments: MomentItem[], onCreated: CreateFunction
 }) => {
-  const [mode] = useState<'left' | 'alternate' | 'right'>('left');
   const items = moments.map((e) => ({label: e.datetime, children: e.content}));
   return (
     <Timeline
-      mode={mode}
+      mode="left"
       items={items}
     />
   );
@@ -167,7 +197,7 @@ const MomentPage = () => {
   return (
     <>
     <MomentForm onCreated={OnCreated}></MomentForm>
-    <ProList<{ day: string, moments: MomentItem[]}>
+    <ProList<DailyMoment>
       rowKey="day"
       // headerTitle="支持展开的列表"
       // actionRef={}

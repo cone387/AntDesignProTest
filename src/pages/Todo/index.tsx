@@ -1,106 +1,44 @@
 import { ProList } from '@ant-design/pro-components';
-import { Button, Space, Tag } from 'antd';
-import type { Key } from 'react';
+import { Button, Progress, Space } from 'antd';
 import { useState } from 'react';
+import type { Key } from 'react';
 import { Timeline } from 'antd';
 import { Form, Input } from 'antd';
 import { EnvironmentOutlined, SmileOutlined, SendOutlined } from '@ant-design/icons';
 import { Row, Col } from 'antd';
 import MomentUtil from 'moment';
 import { Store } from 'antd/lib/form/interface';
+import React from 'react';
+import { Checkbox } from 'antd';
+import type { CheckboxChangeEvent } from 'antd/es/checkbox';
+import { To } from 'history';
 
 
 
-interface MomentItem{
+
+interface TodoItem{
   // id: number;
-  datetime: string;
+  title: string;
+  done: boolean;
   content: string;
 }
 
-interface DailyMoment {
-  day: string;
-  moments: MomentItem[];
-}
-
-
-const MockDailyMoment: DailyMoment[] = [{
-  day: "2023-08-09",
-  moments: [
-      {
-        datetime: '09:12:11',
-        content: 'Create a services',
-      },
-      {
-        datetime: '09:12:11',
-        content: 'Solve initial network problems',
-      },
-      {
-        datetime: '04:12:11',
-        content: 'Network problems being solved',
-      },
-    ]
-  },
-  {
-    day: "2023-08-08",
-    moments: [
-      {
-        datetime: '09:12:11',
-        content: 'Create a services',
-      },
-      {
-        datetime: '09:12:11',
-        content: 'Solve initial network problems',
-      },
-      {
-        datetime: '04:12:11',
-        content: 'Network problems being solved',
-      },
-    ]
-  },
-  {
-    day: "2023-08-07",
-    moments: [
-        {
-          datetime: '09:12:11',
-          content: 'Create a services',
-        },
-        {
-          datetime: '09:12:11',
-          content: 'Solve initial network problems',
-        },
-        {
-          datetime: '04:12:11',
-          content: 'Network problems being solved',
-        },
-      ]
-    },
-];
 
 interface CreateFunction {
-  (moment: MomentItem): void;
+  (todo: TodoItem): void;
 }
 
-const MomentForm = ({onCreated}: {onCreated: CreateFunction}) => {
+const TodoForm = ({onCreated}: {onCreated: CreateFunction}) => {
   const [form] = Form.useForm();
   const onFinish = (values: Store) => {
     console.log('Received values:', values);
-    const time = MomentUtil(new Date().getTime());
-    const day = time.format('YYYY-MM-DD');
-    const datetime = time.format('YYYY-MM-DD HH:mm:ss');
-    let moments: MomentItem[] = [];
-    for (const item of MockDailyMoment) {
-      if(item.day === day){
-        moments = item.moments;
-        break;
-      }
-    }
-
-    if(moments.length === 0){
-      MockDailyMoment.unshift({day: day, moments: moments});
-    }
-    const moment = {datetime: datetime, content: values["content"]};
-    moments.unshift(moment);
-    onCreated(moment);
+    const todo = {
+      content: values.content,
+      title: values.content,
+      done: false
+    };
+    MockTodoList.unshift(todo);
+    onCreated(todo);
     form.setFieldValue("content", "");
   };
 
@@ -137,71 +75,85 @@ const MomentForm = ({onCreated}: {onCreated: CreateFunction}) => {
   );
 };
 
+const MockTodoList = [
+  {
+    title: "规划好今日待办事项",
+    done: false,
+    content: "写小说 打游戏"
+  }
+]
 
-const MomentTimeline = (
-  {moments}: {moments: MomentItem[], onCreated: CreateFunction
-}) => {
-  const [mode] = useState<'left' | 'alternate' | 'right'>('left');
-  const items = moments.map((e) => ({label: e.datetime, children: e.content}));
-  return (
-    <Timeline
-      mode={mode}
-      items={items}
-    />
-  );
+const dataSource = [
+  {
+    title: '语雀的天空',
+    avatar:
+      'https://gw.alipayobjects.com/zos/antfincdn/efFD%24IOql2/weixintupian_20170331104822.jpg',
+  },
+  {
+    title: 'Ant Design',
+    avatar:
+      'https://gw.alipayobjects.com/zos/antfincdn/efFD%24IOql2/weixintupian_20170331104822.jpg',
+  },
+  {
+    title: '蚂蚁金服体验科技',
+    avatar:
+      'https://gw.alipayobjects.com/zos/antfincdn/efFD%24IOql2/weixintupian_20170331104822.jpg',
+  },
+  {
+    title: 'TechUI',
+    avatar:
+      'https://gw.alipayobjects.com/zos/antfincdn/efFD%24IOql2/weixintupian_20170331104822.jpg',
+  },
+];
+
+const onChange = (e: CheckboxChangeEvent) => {
+  console.log(`checked = ${e.target.checked}`);
 };
 
 
-const MomentPage = () => {
-  MockDailyMoment.sort((a, b) => (b.day.localeCompare(a.day)));
-  const [defaultExpandedRowKeys, setExpandedRowKeys] = useState<readonly Key[]>(
-    [MockDailyMoment[0].day],
-  );
-  const [dayiyMoment, setDailyMoment] = useState<DailyMoment[]>(MockDailyMoment);
-  
-  const OnCreated = () => {
-    console.log("waht happend");
-    setDailyMoment([...MockDailyMoment]);
-  }
+const TodoPage: React.FC = () => {
+  const [todoList, setTodoList] = useState<TodoItem[]>(MockTodoList);
 
+  const OnCreated = () => {
+    setTodoList([...MockTodoList]);
+  }
   return (
     <>
-    <MomentForm onCreated={OnCreated}></MomentForm>
-    <ProList<{ day: string, moments: MomentItem[]}>
-      rowKey="day"
-      // headerTitle="支持展开的列表"
-      // actionRef={}
-      expandable={{
-        onExpandedRowsChange: setExpandedRowKeys,
-        // expandRowByClick: true,
-        defaultExpandedRowKeys: defaultExpandedRowKeys
+      <TodoForm onCreated={ OnCreated }></TodoForm>
+      <ProList<TodoItem>
+      toolBarRender={() => {
+        return [
+          <Button key="3" type="primary">
+            新建
+          </Button>,
+        ];
       }}
-      dataSource={dayiyMoment}
       metas={{
-        title: { render: (dom, item) => item.day},
+        title: {},
         description: {
           render: (dom, item) => {
-            return <div style={{ marginTop: 20 }}><MomentTimeline moments={item.moments} onCreated={OnCreated}></MomentTimeline></div>
-             
+            return item.content;
           },
         },
-        content: {
+        avatar: {
           render: () => {
-            return <></>
-          },
-        },
-        subTitle: {
-          render: (dom, item) => {
-            return <Space size={0}>
-                <Tag color="blue">{item.moments.length} moments</Tag>
-              </Space>
+            return <Checkbox onChange={onChange}></Checkbox>;
           }
-        }
+        },
+        extra: {},
+        actions: {
+          // render: () => {
+          //   return [<a key="init">邀请</a>, '发布'];
+          // },
+        },
       }}
+      rowKey="title"
+      headerTitle="支持选中的列表"
+      // rowSelection={rowSelection}
+      dataSource={ todoList }
     />
     </>
   );
 };
 
-
-export default MomentPage;
+export default TodoPage;
