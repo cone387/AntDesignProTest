@@ -28,6 +28,14 @@ interface CreateFunction {
   (todo: TodoItem): void;
 }
 
+const MockTodoList = [
+  {
+    title: "规划好今日待办事项",
+    done: false,
+    content: "写小说 打游戏"
+  }
+]
+
 const TodoForm = ({onCreated}: {onCreated: CreateFunction}) => {
   const [form] = Form.useForm();
   const onFinish = (values: Store) => {
@@ -75,13 +83,6 @@ const TodoForm = ({onCreated}: {onCreated: CreateFunction}) => {
   );
 };
 
-const MockTodoList = [
-  {
-    title: "规划好今日待办事项",
-    done: false,
-    content: "写小说 打游戏"
-  }
-]
 
 const dataSource = [
   {

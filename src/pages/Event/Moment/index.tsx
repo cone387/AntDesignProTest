@@ -1,84 +1,32 @@
 import { ProList } from '@ant-design/pro-components';
-import { Button, DatePickerProps, Modal, Space, Tag, TimePicker } from 'antd';
+import { Button, Space, Tag } from 'antd';
 import type { ChangeEventHandler, Key } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Timeline, DatePicker } from 'antd';
 import { Form, Input } from 'antd';
-import { EnvironmentOutlined, SmileOutlined, SendOutlined, ClockCircleTwoTone, ClockCircleOutlined } from '@ant-design/icons';
+import { EnvironmentOutlined, SmileOutlined, SendOutlined } from '@ant-design/icons';
 import { Row, Col } from 'antd';
 import MomentUtil from 'moment';
 import { Store } from 'antd/lib/form/interface';
 import DayJS from 'dayjs';
-import { TimePickerProps } from 'antd/lib';
 import React from 'react';
-import { render } from '@testing-library/react';
+import { requestMoments, DailyMoment, MomentItem, requestMomentsGroup, createMoment, MomentGroup, GroupDimension } from '@/services/event/moment';
 
 
-interface MomentItem{
-  // id: number;
-  content: string;
-  moment_time: string;
-  // create_time: string;
+
+function toDailyMoment(moments: MomentItem[]) {
+  const mapping: {[key: string]: any} = {};
+  for (const item of moments) {
+    const date = item.event_time.split(' ')[0];
+    let moments = mapping[date];
+    if(!moments){
+      moments = mapping[date] = [];
+    }
+    moments.push(item);
+  }
+  return Object.keys(mapping).map((key) => ({date: key, moments: mapping[key]}));
 }
 
-interface DailyMoment {
-  date: string;
-  moments: MomentItem[];
-}
-
-
-const MockDailyMoment: DailyMoment[] = [{
-  date: "2023-08-09",
-  moments: [
-      {
-        moment_time: '2023-08-09 09:12:11',
-        content: 'Create a services',
-      },
-      {
-        moment_time: '2023-08-09 09:12:11',
-        content: 'Solve initial network problems',
-      },
-      {
-        moment_time: '2023-08-09 04:12:11',
-        content: 'Network problems being solved',
-      },
-    ]
-  },
-  {
-    date: "2023-08-08",
-    moments: [
-      {
-        moment_time: '2023-08-08 09:12:11',
-        content: 'Create a services',
-      },
-      {
-        moment_time: '2023-08-08 09:12:11',
-        content: 'Solve initial network problems',
-      },
-      {
-        moment_time: '2023-08-08 04:12:11',
-        content: 'Network problems being solved',
-      },
-    ]
-  },
-  {
-    date: "2023-08-07",
-    moments: [
-        {
-          moment_time: '2023-08-07 09:12:11',
-          content: 'Create a services',
-        },
-        {
-          moment_time: '2023-08-07 09:12:11',
-          content: 'Solve initial network problems',
-        },
-        {
-          moment_time: '2023-08-07 04:12:11',
-          content: 'Network problems being solved',
-        },
-      ]
-    },
-];
 
 interface CreateFunction {
   (moment: MomentItem): void;
@@ -88,8 +36,13 @@ interface CreateFunction {
 const now = MomentUtil(new Date().getTime());
 
 const EditingMomentItem = {
-  momentTime: now.format("YYYY-MM-DD HH:mm:ss"),
   content: "",
+  id: -1,
+  event_time: now.format("YYYY-MM-DD HH:mm:ss"),
+  create_time: now.format("YYYY-MM-DD HH:mm:ss"),
+  extra: {},
+  feeling: "",
+  tags: [],
 
   reset(){
     this.content = "";
@@ -157,28 +110,18 @@ const MomentForm = ({onCreated}: {onCreated: CreateFunction}) => {
 
   const onFinish = (values: Store) => {
     const time = MomentUtil(new Date().getTime());
-    const date = time.format('YYYY-MM-DD');
-    const moment_time = time.format('YYYY-MM-DD HH:mm:ss');
-    let moments: MomentItem[] = [];
-    for (const item of MockDailyMoment) {
-      if(item.date === date){
-        moments = item.moments;
-        break;
-      }
-    }
-
-    if(moments.length === 0){
-      MockDailyMoment.unshift({date: date, moments: moments});
-    }
-    const moment = {moment_time: moment_time, content: values["content"]};
-    moments.unshift(moment);
-    onCreated(moment);
-    form.setFieldValue("content", "");
-    setTags([]);
+    const event_time = time.format('YYYY-MM-DD HH:mm:ss');
+    const moment = {...EditingMomentItem, event_time: event_time, content: values["content"]};
+    
+    createMoment(moment).then((created) => {
+      form.setFieldValue("content", "");
+      setTags([]);
+      onCreated(created);
+    });
   };
 
   const onMomentDateTimeChanged: OnDateTimeChangedFunction = (datetime) =>{
-    EditingMomentItem.momentTime = datetime;
+    EditingMomentItem.event_time = datetime;
   }
 
   const handleInputChange: ChangeEventHandler<HTMLTextAreaElement> = (e) => {
@@ -219,7 +162,7 @@ const MomentForm = ({onCreated}: {onCreated: CreateFunction}) => {
         <Row justify="space-between">
           <Col span={10}>
             <Space>
-            <MomentDateTimePicker defaultValue={EditingMomentItem.momentTime} onChanged={onMomentDateTimeChanged}></MomentDateTimePicker>
+            <MomentDateTimePicker defaultValue={EditingMomentItem.event_time} onChanged={onMomentDateTimeChanged}></MomentDateTimePicker>
             <Button type="primary" icon={<EnvironmentOutlined />} />
             <Button icon={<SmileOutlined />} />
             </Space>
@@ -238,7 +181,7 @@ const MomentTimeline = (
   {moments}: {moments: MomentItem[], onCreated: CreateFunction
 }) => {
   const items = moments.map((e) => ({
-    label: e.moment_time.split(' ')[1], 
+    label: e.event_time.split(' ')[1], 
     children: e.content}));
   return (
     <Timeline
@@ -250,31 +193,75 @@ const MomentTimeline = (
 
 
 const MomentPage = () => {
-  MockDailyMoment.sort((a, b) => (b.date.localeCompare(a.date)));
-  const [defaultExpandedRowKeys, setExpandedRowKeys] = useState<readonly Key[]>(
-    [MockDailyMoment[0].date],
-  );
-  const [dayiyMoment, setDailyMoment] = useState<DailyMoment[]>(MockDailyMoment);
+  // Moments.sort((a, b) => (b.date.localeCompare(a.date)));
+  const [moments, setMoments] = useState<MomentItem[]>([]);
+  const [expandedRowKeys, setExpandedRowKeys] = useState<readonly Key[]>([]);
+  // const [month] = useState<string>(DayJS().format('YYYY-MM'));
+  const [groups, setGroups] = useState<MomentGroup[]>([]);
   
-  const OnMomentCreated = () => {
-    setDailyMoment([...MockDailyMoment]);
+  const dayiyMoment: DailyMoment[] = toDailyMoment(moments);
+
+  const OnMomentCreated = (moment: MomentItem) => {
+    setMoments([moment, ...moments]);
   }
 
+  function requestGroupMoments(month?: string) {
+    requestMoments({month: month}).then((response) => {
+      setMoments(response.results);
+      if(response.results.length > 0){
+        setExpandedRowKeys([response.results[0].event_time.split(' ')[0]]);
+      }
+    });
+  }
+
+  useEffect(() => {
+    requestMomentsGroup().then((momentGroups) => {
+      setGroups(momentGroups);
+      requestGroupMoments(momentGroups[0]?.[0]);
+    });
+  }, []);
+
+  function onMonthChanged(month: DayJS.Dayjs | null) {
+    requestGroupMoments(month?.format('YYYY-MM'));
+  }
+  
+  function disabledDate(current: DayJS.Dayjs) {
+    // Can not select days before today and today
+    // return current && current > DayJS().endOf('day');
+    for (const group of groups) {
+      if(group[0] === current.format("YYYY-MM")){
+        return false;
+      }
+    }
+    return true;
+  }
   return (
     <>
     <MomentForm onCreated={OnMomentCreated}></MomentForm>
+    <Space><DatePicker onChange={onMonthChanged} picker="month" 
+      disabledDate={disabledDate} format={"YYYY年MM月"} /></Space>
     <ProList<DailyMoment>
-      rowKey="day"
+      rowKey="date"
       // headerTitle="支持展开的列表"
       // actionRef={}
+      // search={{}}
+      // pagination={{
+      //   defaultPageSize: 5,
+      //   showSizeChanger: true,
+      //   pageSize: 5,
+      //   total: moments.length,
+      //   onChange(page, pageSize) {
+      //     console.log("page", page, pageSize)
+      //   },
+      // }}
       expandable={{
         onExpandedRowsChange: setExpandedRowKeys,
         // expandRowByClick: true,
-        defaultExpandedRowKeys: defaultExpandedRowKeys
+        expandedRowKeys: expandedRowKeys,
       }}
       dataSource={dayiyMoment}
       metas={{
-        title: { render: (dom, item) => item.date},
+        title: { render: (dom, item) => item.date,  dataIndex: 'date', title: '日期'},
         description: {
           render: (dom, item) => {
             return <div style={{ marginTop: 20 }}><MomentTimeline moments={item.moments} onCreated={OnMomentCreated}></MomentTimeline></div>
@@ -283,7 +270,6 @@ const MomentPage = () => {
         // avatar: {},
         content: {},
         actions: {},
-        extra: {},
         subTitle: {
           render: (dom, item) => {
             return <Space size={0}>

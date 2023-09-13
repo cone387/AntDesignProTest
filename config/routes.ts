@@ -46,17 +46,17 @@ export default [
       {
         path: 'todo',
         name: 'todo',
-        component: './Todo'
+        component: './Event/Todo'
       },
       {
         path: 'moment',
         name: 'moment',
-        component: './Moment'
+        component: './Event/Moment'
       },
       {
         path: 'list',
         name: 'list',
-        component: './List'
+        component: './Event/List'
       },
     ],
   },

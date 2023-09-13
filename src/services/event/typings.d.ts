@@ -1,20 +1,22 @@
 // @ts-ignore
 /* eslint-disable */
 
-declare namespace API1 {
+declare namespace API {
   type CurrentUser = {
-    name?: string;
-    avatar?: string;
-    userid?: string;
+    username?: string;
     email?: string;
-    signature?: string;
-    title?: string;
+    is_active?: string;
+    email?: string;
+    last_login?: string;
+    date_joined?: string;
+    avatar?: string;
     group?: string;
     tags?: { key?: string; label?: string }[];
     notifyCount?: number;
     unreadCount?: number;
     country?: string;
     access?: string;
+    is_superuser?: boolean;
     geographic?: {
       province?: { label?: string; key?: string };
       city?: { label?: string; key?: string };
@@ -24,9 +26,10 @@ declare namespace API1 {
   };
 
   type LoginResult = {
-    status?: string;
+    refresh?: string;
+    access?: string;
+    detail?: string;
     type?: string;
-    currentAuthority?: string;
   };
 
   type PageParams = {
