@@ -102,3 +102,114 @@ declare namespace API {
     type?: NoticeIconItemType;
   };
 }
+
+type NullableString = string | null;
+
+declare namespace Event {
+  interface Tag {
+    id: number;
+    name: string;
+    color: string;
+  }
+}
+
+declare interface Json {
+  [key: string]: any;
+}
+
+declare namespace Media {
+  interface Item {
+    key: any;
+    id: number;
+    size: number;
+    type: string;
+    uri: string;
+    model: string;
+    extra: Json;
+    engine: number;
+    upload_time: string;
+  }
+}
+
+declare namespace Moment {
+  type GroupDimension = 'month' | 'feeling' | 'tag';
+
+  interface DailyMoment {
+    date: string;
+    moments: MomentItem[];
+  }
+
+  interface MonthGroup {
+    month: string;
+    count: number;
+  }
+
+  interface FeelingGroup {
+    feeling__emoji: string;
+    feeling__name: string;
+    count: number;
+  }
+
+  interface TagGroup {
+    tags__name: string;
+    tags__color: string;
+    count: number;
+  }
+
+  interface Group {
+    month?: MonthGroup[];
+    feeling?: FeelingGroup[];
+    tag?: TagGroup[];
+  }
+
+  interface ListResponse {
+    count: number;
+    next: NullableString;
+    previous: NullableString;
+    results: MomentItem[];
+  }
+
+  interface Feeling {
+    id: number;
+    emoji: string;
+    name: string;
+  }
+
+  interface FormItem {
+    feeling?: number | null;
+    post_tags?: NullableString; // 按逗号分隔
+    content: string;
+    post_medias: number[];
+    event_time: string;
+    extra?: Json | null;
+    [key: string]: any;
+  }
+
+  interface Item {
+    id: number;
+    feeling: Feeling | null;
+    tags: Event.Tag[];
+    content: string;
+    medias: Media.Item[];
+    media_info: number[] | null;
+    event_time: string;
+    create_time: string;
+    extra: Json;
+  }
+
+  interface QueryParams {
+    // ?content__contains=大厦大&feeling__emoji=&feeling__name=&event_time__gte=&event_time__lte=&create_time__gte=&create_time__lte=&tag=&date=&month=
+    content__contains?: NullableString;
+    feeling__emoji?: NullableString;
+    feeling__name?: NullableString;
+    event_time__gte?: NullableString;
+    event_time__lte?: NullableString;
+    create_time__gte?: NullableString;
+    create_time__lte?: NullableString;
+    tag?: NullableString;
+    date?: NullableString;
+    month?: NullableString;
+    page?: number;
+    page_size?: number;
+  }
+}

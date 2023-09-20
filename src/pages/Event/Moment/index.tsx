@@ -1,12 +1,5 @@
-import {
-  DailyMoment,
-  MomentGroup,
-  MomentItem,
-  createMoment,
-  requestMoments,
-  requestMomentsGroup,
-} from '@/services/event/moment';
-import { uploadMeida } from '@/services/media/qiniu_clound';
+import { createMoment, requestMoments, requestMomentsGroup } from '@/services/event/moment';
+import { uploadToQiNiu, uploadToServer } from '@/services/media/qiniu_clound';
 import {
   EnvironmentOutlined,
   PictureOutlined,
@@ -14,16 +7,28 @@ import {
   SmileOutlined,
 } from '@ant-design/icons';
 import { ProList } from '@ant-design/pro-components';
-import { Button, Col, DatePicker, Form, Input, Row, Space, Tag, Timeline, Upload } from 'antd';
+import {
+  Button,
+  Col,
+  DatePicker,
+  Form,
+  Image,
+  Input,
+  Row,
+  Space,
+  Tag,
+  Timeline,
+  Upload,
+} from 'antd';
 import { Store } from 'antd/lib/form/interface';
 import { UploadChangeParam, UploadFile } from 'antd/lib/upload';
 import DayJS from 'dayjs';
 import MomentUtil from 'moment';
 import type { UploadRequestOption } from 'rc-upload/lib/interface';
-import type { ChangeEventHandler, Key } from 'react';
+import type { ChangeEventHandler } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-function toDailyMoment(moments: MomentItem[]) {
+function toDailyMoment(moments: Moment.Item[]) {
   const mapping: { [key: string]: any } = {};
   for (const item of moments) {
     const date = item.event_time.split(' ')[0];
@@ -37,22 +42,29 @@ function toDailyMoment(moments: MomentItem[]) {
 }
 
 interface CreateFunction {
-  (moment: MomentItem): void;
+  (moment: Moment.Item): void;
 }
 
 const now = MomentUtil(new Date().getTime());
 
-const EditingMomentItem = {
+const EditingMomentItem: Moment.FormItem & {
+  mediaList: UploadFile<Media.Item>[];
+  reset: () => void;
+} = {
   content: '',
-  id: -1,
   event_time: now.format('YYYY-MM-DD HH:mm:ss'),
-  create_time: now.format('YYYY-MM-DD HH:mm:ss'),
+  post_medias: [],
   extra: {},
-  feeling: '',
-  tags: [],
+  feeling: null,
+  post_tags: null,
+  mediaList: [],
 
   reset() {
     this.content = '';
+    this.tags = '';
+    this.feeling = null;
+    this.post_medias = [];
+    this.extra = {};
   },
 };
 
@@ -128,15 +140,17 @@ const MomentDateTimePicker = ({
 const MomentForm = ({ onCreated }: { onCreated: CreateFunction }) => {
   const [form] = Form.useForm();
   const [tags, setTags] = useState<string[]>([]);
+  const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
 
   const onFinish = (values: Store) => {
-    const time = MomentUtil(new Date().getTime());
-    const event_time = time.format('YYYY-MM-DD HH:mm:ss');
-    const moment = { ...EditingMomentItem, event_time: event_time, content: values['content'] };
+    const content = values['content'].replace(/#[^\s#]+/g, '').trimStart();
+    const moment = { ...EditingMomentItem, content: content };
 
     createMoment(moment).then((created) => {
       form.setFieldValue('content', '');
       setTags([]);
+      setUploadFiles([]);
+      EditingMomentItem.reset();
       onCreated(created);
     });
   };
@@ -150,6 +164,7 @@ const MomentForm = ({ onCreated }: { onCreated: CreateFunction }) => {
     EditingMomentItem.content = e.target.value;
     const inputText = e.target.value;
     const extractedTags = inputText.match(/#[^\s#]+/g) || [];
+    EditingMomentItem.post_tags = extractedTags.map((e) => e.slice(1)).join(',');
     setTags(extractedTags);
   };
 
@@ -163,23 +178,25 @@ const MomentForm = ({ onCreated }: { onCreated: CreateFunction }) => {
 
   const onChange = (info: UploadChangeParam<UploadFile<any>>) => {
     console.log('onChange: ', info);
+    setUploadFiles(info.fileList);
   };
 
-  // const action = (file: UploadFile<any>) => {
-  //   console.log(file);
-  //   return requestUploadToken({model: 'moment', file: file}).then((response) => {
-  //     return "http://127.0.0.1:8002/event/storage/"
-  //   });
-  // };
-
-  const customRequest = (options: UploadRequestOption) => {
+  const customRequest = (options: UploadRequestOption<Media.Item>) => {
     console.log('customRequest: ', options);
-    uploadMeida(
-      { file: options.file as File, model: 'moment' },
+    const file = options.file as File;
+    uploadToQiNiu(
+      { file: file, model: 'Moment' },
       {
         complete: (response) => {
           console.log('complete: ', response);
-          options.onSuccess?.(response);
+          uploadToServer({ model: 'Moment', key: response.key, size: file.size }).then(
+            (response) => {
+              console.log('uploadToServer: ', response);
+              EditingMomentItem.post_medias.push(response.id);
+              // EditingMomentItem.mediaList.push();
+              options.onSuccess?.(response);
+            },
+          );
         },
         error: (error) => {
           console.log('error: ', error);
@@ -202,7 +219,11 @@ const MomentForm = ({ onCreated }: { onCreated: CreateFunction }) => {
           </Tag>
         ))}
       </div>
-      <Form.Item name="content" rules={[{ required: true, message: 'Please input your content!' }]}>
+      <Form.Item
+        style={{ padding: 0, margin: 0 }}
+        name="content"
+        rules={[{ required: true, message: 'Please input your content!' }]}
+      >
         <Input.TextArea
           placeholder="What's happening?"
           autoSize={{ minRows: 3, maxRows: 6 }}
@@ -216,6 +237,12 @@ const MomentForm = ({ onCreated }: { onCreated: CreateFunction }) => {
         ref={uploadRef}
         maxCount={10}
         onChange={onChange}
+        defaultFileList={[]}
+        fileList={uploadFiles}
+        style={{ padding: 0, margin: 0 }}
+        onPreview={(file: UploadFile<Media.Item>) => {
+          window.open(file.response?.uri, 'image_preview', 'noopener');
+        }}
         customRequest={customRequest}
       ></Upload>
       <Form.Item name="location">
@@ -240,118 +267,351 @@ const MomentForm = ({ onCreated }: { onCreated: CreateFunction }) => {
   );
 };
 
-const MomentTimeline = ({ moments }: { moments: MomentItem[]; onCreated: CreateFunction }) => {
+const MomentTimeline = ({ moments }: { moments: Moment.Item[]; onCreated: CreateFunction }) => {
   const items = moments.map((e) => ({
-    label: e.event_time.split(' ')[1],
+    label: e.event_time.split(' ')[1].slice(0, 5),
     children: e.content,
   }));
   return <Timeline mode="left" items={items} />;
 };
 
+const DayMomentList = ({ moments }: { moments: Moment.Item[] }) => {
+  return (
+    <ProList<Moment.Item>
+      rowKey="id"
+      dataSource={moments}
+      // showActions="hover"
+      // editable={{
+      //   onSave: async (key, record, originRow) => {
+      //     console.log(key, record, originRow);
+      //     return true;
+      //   },
+      // }}
+      // onDataSourceChange={setDataSource}
+      metas={{
+        title: {
+          dataIndex: 'content',
+        },
+        avatar: {
+          // dataIndex: 'feeling',
+          editable: false,
+          render: (dom, entity) => {
+            return entity.feeling?.emoji;
+          },
+        },
+        description: {
+          dataIndex: 'desc',
+          render: (dom, entity) => {
+            let media;
+            console.log(entity.medias);
+            if (entity.medias) {
+              media = entity.medias.map((media) => (
+                <Image key={media.id} src={media.uri} width={100} height={100} />
+              ));
+            }
+            return (
+              <>
+                <Space>{media}</Space>
+
+                <Row justify="space-between">
+                  <Col span={10}>
+                    <Space>
+                      <span>{entity.event_time.split(' ')[1].slice(0, 5)}</span>
+                    </Space>
+                  </Col>
+                  <Col>
+                    {entity.tags.map((tag) => (
+                      <Tag key={tag.id} color={tag.color ?? '#5BD8A6'}>
+                        {tag.name}
+                      </Tag>
+                    ))}
+                  </Col>
+                </Row>
+              </>
+            );
+          },
+        },
+        // subTitle: {
+        //   render: () => {
+        //     return (
+        //       <Space size={0}>
+        //         <Tag color="blue">Ant Design</Tag>
+        //         <Tag color="#5BD8A6">TechUI</Tag>
+        //       </Space>
+        //     );
+        //   },
+        // },
+      }}
+    />
+  );
+};
+
 const MomentPage = () => {
-  // Moments.sort((a, b) => (b.date.localeCompare(a.date)));
-  const [moments, setMoments] = useState<MomentItem[]>([]);
-  const [expandedRowKeys, setExpandedRowKeys] = useState<readonly Key[]>([]);
-  // const [month] = useState<string>(DayJS().format('YYYY-MM'));
-  const [groups, setGroups] = useState<MomentGroup[]>([]);
+  const [moments, setMoments] = useState<Moment.Item[]>([]);
+  const [momentGroup, setMomentGroup] = useState<Moment.Group>({});
+  const [queryParams] = useState<Moment.QueryParams>({ page: 1, page_size: 10 });
+  const [totalNum, setTotalNum] = useState<number>(0);
 
-  const dayiyMoment: DailyMoment[] = toDailyMoment(moments);
-
-  const OnMomentCreated = (moment: MomentItem) => {
+  const OnMomentCreated = (moment: Moment.Item) => {
     setMoments([moment, ...moments]);
   };
 
-  function requestGroupMoments(month?: string) {
-    requestMoments({ month: month }).then((response) => {
-      setMoments(response.results);
-      if (response.results.length > 0) {
-        setExpandedRowKeys([response.results[0].event_time.split(' ')[0]]);
-      }
-    });
-  }
+  const refreshMoments = async () => {
+    const response = await requestMoments(queryParams);
+    setMoments(response.results);
+    setTotalNum(response.count);
+  };
 
   useEffect(() => {
-    requestMomentsGroup().then((momentGroups) => {
-      setGroups(momentGroups);
-      requestGroupMoments(momentGroups[0]?.[0]);
+    requestMomentsGroup().then((momentGroup) => {
+      setMomentGroup(momentGroup);
+      refreshMoments();
     });
   }, []);
 
-  function onMonthChanged(month: DayJS.Dayjs | null) {
-    requestGroupMoments(month?.format('YYYY-MM'));
+  const monthSelectValueEnum: Json = {};
+  for (const group of momentGroup.month ?? []) {
+    monthSelectValueEnum[group.month] = group.month;
   }
+  const feelingSelectValue: Json = {};
+  for (const feeling of momentGroup.feeling ?? []) {
+    feelingSelectValue[feeling.feeling__emoji] = feeling.feeling__emoji;
+  }
+  const tagSelectValue: Json = {};
+  for (const tag of momentGroup.tag ?? []) {
+    tagSelectValue[tag.tags__name] = tag.tags__name;
+  }
+  const listRef = useRef();
+  const formRef = useRef();
 
-  function disabledDate(current: DayJS.Dayjs) {
-    // Can not select days before today and today
-    // return current && current > DayJS().endOf('day');
-    for (const group of groups) {
-      if (group[0] === current.format('YYYY-MM')) {
-        return false;
-      }
-    }
-    return true;
-  }
   return (
     <>
       <MomentForm onCreated={OnMomentCreated}></MomentForm>
-      <Space>
-        <DatePicker
-          onChange={onMonthChanged}
-          picker="month"
-          disabledDate={disabledDate}
-          format={'YYYY年MM月'}
-        />
-      </Space>
-      <ProList<DailyMoment>
-        rowKey="date"
-        // headerTitle="支持展开的列表"
-        // actionRef={}
-        // search={{}}
-        // pagination={{
-        //   defaultPageSize: 5,
-        //   showSizeChanger: true,
-        //   pageSize: 5,
-        //   total: moments.length,
-        //   onChange(page, pageSize) {
-        //     console.log("page", page, pageSize)
-        //   },
+      <ProList<Moment.Item>
+        actionRef={listRef}
+        rowKey="event_time"
+        formRef={formRef}
+        search={{
+          filterType: 'query',
+          collapsed: false,
+          span: 4,
+          split: false,
+          labelWidth: 'auto',
+        }}
+        // request={async (params = {}) => {
+        //   queryParams.page = params.current;
+        //   queryParams.page_size = params.pageSize;
+        //   queryParams.tag = params['tags'];
+        //   queryParams.month = params['month'];
+        //   queryParams.content__contains = params['content'];
+        //   queryParams.feeling__emoji = params['avatar'];
+        //   const response = await requestMoments(queryParams);
+        //   return Promise.resolve({
+        //     data: response.results,
+        //     success: true,
+        //     total: response.count,
+        //   });
+        //   // .then((response) => {
+        //   //     setMoments(response.results);
+        //   //     setTotalNum(response.count)
+        //   //   });
         // }}
-        expandable={{
-          onExpandedRowsChange: setExpandedRowKeys,
-          // expandRowByClick: true,
-          expandedRowKeys: expandedRowKeys,
+        pagination={{
+          defaultPageSize: queryParams.page,
+          showSizeChanger: true,
+          pageSize: queryParams.page_size,
+          total: totalNum,
+          onChange(page, pageSize) {
+            console.log('page:', page, pageSize);
+            queryParams.page = page;
+            queryParams.page_size = pageSize;
+            refreshMoments();
+            // requestMoments(queryParams).then((response) => {
+            //   setQueryParams(queryParams);
+            //   setMoments(response.results);
+            // });
+          },
         }}
-        dataSource={dayiyMoment}
+        onSubmit={(params) => {
+          console.log('params:', params);
+          queryParams.tag = params['tags'];
+          queryParams.month = params['month'];
+          queryParams.content__contains = params['content'];
+          queryParams.feeling__emoji = params['avatar'];
+          queryParams.page = 1;
+          refreshMoments();
+        }}
+        dataSource={moments}
         metas={{
-          title: { render: (dom, item) => item.date, dataIndex: 'date', title: '日期' },
-          description: {
-            render: (dom, item) => {
-              return (
-                <div style={{ marginTop: 20 }}>
-                  <MomentTimeline
-                    moments={item.moments}
-                    onCreated={OnMomentCreated}
-                  ></MomentTimeline>
-                </div>
-              );
-            },
+          month: {
+            title: '年月',
+            valueType: 'select',
+            valueEnum: monthSelectValueEnum,
           },
-          // avatar: {},
-          content: {},
-          actions: {},
-          subTitle: {
-            render: (dom, item) => {
+          title: {
+            dataIndex: 'content',
+            valueType: 'text',
+            title: '内容',
+          },
+          avatar: {
+            // dataIndex: 'feeling',
+            editable: false,
+            render: (dom, entity) => {
+              return entity.feeling?.emoji;
+            },
+            title: 'feeling',
+            valueType: 'select',
+            valueEnum: feelingSelectValue,
+          },
+          tags: {
+            title: '标签',
+            valueType: 'select',
+            valueEnum: tagSelectValue,
+          },
+
+          description: {
+            dataIndex: 'desc',
+            search: false,
+            render: (dom, entity) => {
+              let media;
+              if (entity.medias) {
+                media = entity.medias.map((media) => (
+                  <Image key={media.id} src={media.uri} width={100} height={100} />
+                ));
+              }
               return (
-                <Space size={0}>
-                  <Tag color="blue">{item.moments.length} moments</Tag>
-                </Space>
+                <>
+                  <Space>{media}</Space>
+
+                  <Row justify="space-between">
+                    <Col span={10}>
+                      <Space>
+                        <span>{entity.event_time.split(' ')[1].slice(0, 5)}</span>
+                      </Space>
+                    </Col>
+                    <Col>
+                      {entity.tags.map((tag) => (
+                        <Tag key={tag.id} color={tag.color ?? '#5BD8A6'}>
+                          {tag.name}
+                        </Tag>
+                      ))}
+                    </Col>
+                  </Row>
+                </>
               );
             },
           },
         }}
-      />
+      ></ProList>
     </>
   );
 };
+
+// const MomentPage = () => {
+//   // Moments.sort((a, b) => (b.date.localeCompare(a.date)));
+//   const [moments, setMoments] = useState<Moment.Item[]>([]);
+//   const [expandedRowKeys, setExpandedRowKeys] = useState<readonly Key[]>([]);
+//   // const [month] = useState<string>(DayJS().format('YYYY-MM'));
+//   const [momentGroup, setMomentGroup] = useState<Moment.Group>({});
+
+//   const dayiyMoment: Moment.DailyMoment[] = toDailyMoment(moments);
+
+//   const OnMomentCreated = (moment: Moment.Item) => {
+//     setMoments([moment, ...moments]);
+//   };
+
+//   function requestGroupMoments(month?: string) {
+//     requestMoments({ month: month }).then((response) => {
+//       setMoments(response.results);
+//       if (response.results.length > 0) {
+//         setExpandedRowKeys([response.results[0].event_time.split(' ')[0]]);
+//       }
+//     });
+//   }
+
+//   useEffect(() => {
+//     requestMomentsGroup().then((momentGroup) => {
+//       setMomentGroup(momentGroup);
+//       requestGroupMoments(momentGroup.month?.[0]?.month);
+//     });
+//   }, []);
+
+//   function onMonthChanged(month: DayJS.Dayjs | null) {
+//     requestGroupMoments(month?.format('YYYY-MM'));
+//   }
+
+//   function disabledDate(current: DayJS.Dayjs) {
+//     // Can not select days before today and today
+//     // return current && current > DayJS().endOf('day');
+//     for (const group of momentGroup.month ?? []) {
+//       if (group.month === current.format('YYYY-MM')) {
+//         return false;
+//       }
+//     }
+//     return true;
+//   }
+//   return (
+//     <>
+//       <MomentForm onCreated={OnMomentCreated}></MomentForm>
+//       <Space>
+//         <DatePicker
+//           onChange={onMonthChanged}
+//           picker="month"
+//           disabledDate={disabledDate}
+//           format={'YYYY年MM月'}
+//         />
+//       </Space>
+//       <ProList<Moment.DailyMoment>
+//         rowKey="date"
+//         // headerTitle="支持展开的列表"
+//         // actionRef={}
+//         // search={{}}
+//         // pagination={{
+//         //   defaultPageSize: 5,
+//         //   showSizeChanger: true,
+//         //   pageSize: 5,
+//         //   total: moments.length,
+//         //   onChange(page, pageSize) {
+//         //     console.log("page", page, pageSize)
+//         //   },
+//         // }}
+//         expandable={{
+//           onExpandedRowsChange: setExpandedRowKeys,
+//           // expandRowByClick: true,
+//           expandedRowKeys: expandedRowKeys,
+//         }}
+//         dataSource={dayiyMoment}
+//         metas={{
+//           title: { render: (dom, item) => item.date, dataIndex: 'date', title: '日期' },
+//           description: {
+//             render: (dom, item) => {
+//               return (
+//                 <div style={{ marginTop: 20 }}>
+//                   <DayMomentList moments={item.moments}></DayMomentList>
+//                   {/* <MomentTimeline
+//                     moments={item.moments}
+//                     onCreated={OnMomentCreated}
+//                   ></MomentTimeline> */}
+//                 </div>
+//               );
+//             },
+//           },
+//           // avatar: {},
+//           content: {},
+//           actions: {},
+//           subTitle: {
+//             render: (dom, item) => {
+//               return (
+//                 <Space size={0}>
+//                   <Tag color="blue">{item.moments.length} moments</Tag>
+//                 </Space>
+//               );
+//             },
+//           },
+//         }}
+//       />
+//     </>
+//   );
+// };
 
 export default MomentPage;

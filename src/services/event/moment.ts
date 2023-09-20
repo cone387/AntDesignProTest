@@ -3,52 +3,14 @@
 import { request } from '@umijs/max';
 import { Key } from 'react';
 
-
-export interface MomentItem{
-  id: number;
-  content: string;
-  event_time: string;
-  create_time: string;
-  extra: {[key: string]: any};
-  feeling?: string;
-  tags: string[];
-}
-
-
-export type GroupDimension = "week" | "month" | "year";
-
-export interface DailyMoment {
-  date: string;
-  moments: MomentItem[];
-}
-
-// export interface MomentGroup {
-//   // [count: number;
-//   // [key: string]: MomentGroupDimension | number;]
-  
-// }
-
-export type MomentGroup = [
-  string,
-  number
-];
-
-export interface MomentResponse {
-  count: number;
-  next: string;
-  previous: string;
-  results: MomentItem[];
-}
-
-
 export async function requestMomentsGroup(
   params?: {
-    by: GroupDimension
+    by: Moment.GroupDimension;
   },
   options?: { [key: string]: any },
-): Promise<MomentGroup[]> {
-  const by = params?.by?? "month";
-  return request(`http://127.0.0.1:8002/event/moment/group/${by}/`, {
+): Promise<Moment.Group> {
+  const by = params?.by ?? 'month';
+  return request('http://127.0.0.1:8002/event/moment/group/', {
     method: 'GET',
     params: {
       ...params,
@@ -57,32 +19,25 @@ export async function requestMomentsGroup(
   });
 }
 
-
-
 export async function requestMoments(
-  params?: {
-    month?: string;
-    date?: string;
-    tag?: string;
-    eventTime?: string;
-    createTime?: string;
-  },
+  params?: Moment.QueryParams,
   options?: { [key: string]: any },
-): Promise<MomentResponse> {
+): Promise<Moment.ListResponse> {
   return request('http://127.0.0.1:8002/event/moment/', {
     method: 'GET',
     params: {
+      page: 1,
+      page_size: 10,
       ...params,
     },
     ...(options || {}),
   });
 }
 
-
 export async function createMoment(
-  moment: MomentItem,
+  moment: Moment.FormItem,
   options?: { [key: string]: any },
-): Promise<MomentItem> {
+): Promise<Moment.Item> {
   return request('http://127.0.0.1:8002/event/moment/', {
     method: 'POST',
     data: moment,
@@ -90,11 +45,10 @@ export async function createMoment(
   });
 }
 
-
 export async function deleteMoment(
   id: Key,
   options?: { [key: string]: any },
-): Promise<MomentResponse> {
+): Promise<Moment.Item> {
   return request('http://127.0.0.1:8002/event/moment/${id}/', {
     method: 'DELETE',
     ...(options || {}),

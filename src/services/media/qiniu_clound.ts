@@ -25,7 +25,7 @@ export function requestUploadToken(
   });
 }
 
-export async function uploadMeida(
+export async function uploadToQiNiu(
   params: {
     file: File;
     model: string;
@@ -41,4 +41,19 @@ export async function uploadMeida(
   const subscription = observable.subscribe(observer as PartialObserver<UploadProgress, any, any>);
   // const subscription = observable.subscribe(next, error, complete) // 这样传参形式也可以
   // subscription.unsubscribe() // 上传取消
+}
+
+export async function uploadToServer(
+  params: { key: string; model: string; size?: number },
+  options?: { [key: string]: any },
+): Promise<Media.Item> {
+  return await request('http://127.0.0.1:8002/event/media/', {
+    method: 'POST',
+    data: {
+      model: params.model,
+      url: `http://cdn.cone387.top/${params.key}`,
+      size: params.size,
+    },
+    ...(options || {}),
+  });
 }
