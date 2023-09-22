@@ -131,35 +131,22 @@ declare namespace Media {
   }
 }
 
+declare interface Device {
+  ua?: string;
+  ip?: string;
+}
+
+declare interface Location {
+  latitude?: number;
+  longitude?: number;
+}
+
 declare namespace Moment {
   type GroupDimension = 'month' | 'feeling' | 'tag';
 
   interface DailyMoment {
     date: string;
     moments: MomentItem[];
-  }
-
-  interface MonthGroup {
-    month: string;
-    count: number;
-  }
-
-  interface FeelingGroup {
-    feeling__emoji: string;
-    feeling__name: string;
-    count: number;
-  }
-
-  interface TagGroup {
-    tags__name: string;
-    tags__color: string;
-    count: number;
-  }
-
-  interface Group {
-    month?: MonthGroup[];
-    feeling?: FeelingGroup[];
-    tag?: TagGroup[];
   }
 
   interface ListResponse {
@@ -176,13 +163,19 @@ declare namespace Moment {
   }
 
   interface FormItem {
-    feeling?: number | null;
+    post_feeling?: number | null;
     post_tags?: NullableString; // 按逗号分隔
     content: string;
     post_medias: number[];
     event_time: string;
     extra?: Json | null;
     [key: string]: any;
+  }
+
+  interface Extra {
+    device?: Device;
+    location?: Location;
+    Json;
   }
 
   interface Item {
@@ -194,7 +187,7 @@ declare namespace Moment {
     media_info: number[] | null;
     event_time: string;
     create_time: string;
-    extra: Json;
+    extra: Extra;
   }
 
   interface QueryParams {
@@ -211,5 +204,26 @@ declare namespace Moment {
     month?: NullableString;
     page?: number;
     page_size?: number;
+  }
+
+  interface MonthGroup {
+    month: string;
+    count: number;
+  }
+
+  interface FeelingGroup extends Feeling {
+    count: number;
+  }
+
+  interface TagGroup {
+    tags__name: string;
+    tags__color: string;
+    count: number;
+  }
+
+  interface Group {
+    month?: MonthGroup[];
+    feeling?: FeelingGroup[];
+    tag?: TagGroup[];
   }
 }

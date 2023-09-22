@@ -1,25 +1,14 @@
 import { createMoment, requestMoments, requestMomentsGroup } from '@/services/event/moment';
 import { uploadToQiNiu, uploadToServer } from '@/services/media/qiniu_clound';
 import {
+  ChromeFilled,
   EnvironmentOutlined,
   PictureOutlined,
   SendOutlined,
   SmileOutlined,
 } from '@ant-design/icons';
 import { ProList } from '@ant-design/pro-components';
-import {
-  Button,
-  Col,
-  DatePicker,
-  Form,
-  Image,
-  Input,
-  Row,
-  Space,
-  Tag,
-  Timeline,
-  Upload,
-} from 'antd';
+import { Button, Col, DatePicker, Form, Image, Input, Modal, Row, Space, Tag, Upload } from 'antd';
 import { Store } from 'antd/lib/form/interface';
 import { UploadChangeParam, UploadFile } from 'antd/lib/upload';
 import DayJS from 'dayjs';
@@ -55,7 +44,7 @@ const EditingMomentItem: Moment.FormItem & {
   event_time: now.format('YYYY-MM-DD HH:mm:ss'),
   post_medias: [],
   extra: {},
-  feeling: null,
+  post_feeling: null,
   post_tags: null,
   mediaList: [],
 
@@ -137,12 +126,144 @@ const MomentDateTimePicker = ({
   );
 };
 
-const MomentForm = ({ onCreated }: { onCreated: CreateFunction }) => {
+const BrowseIconMap: { [key: string]: React.ReactElement } = {
+  chrome: <ChromeFilled color="#FFFFFF" />,
+  // safari: 'safari',
+  // firefox: 'firefox',
+  // edge: 'edge',
+  // ie: 'ie',
+  // opera: 'opera',
+};
+
+function extractBrowser(userAgent?: string | null): React.ReactElement | null {
+  if (!userAgent) {
+    return null;
+  }
+  const pattern = /(chrome|safari|firefox|edge|ie|opera)/i;
+  const match = userAgent.match(pattern);
+  if (match) {
+    return BrowseIconMap[match[0].toLowerCase()];
+  } else {
+    return null;
+  }
+}
+
+const FeelingPicker = ({
+  defaultValue,
+  avaliableFeelings,
+}: {
+  defaultValue?: string | null;
+  avaliableFeelings: Moment.FeelingGroup[];
+}) => {
+  const [isModalOpen, setModalOpen] = useState<boolean>(false);
+  const [feeling, setFeeling] = useState<string | undefined | null>(defaultValue);
+  const onChange = (feelingGroup?: Moment.FeelingGroup) => {
+    console.log('feeling: ', feelingGroup);
+    setModalOpen(false);
+    EditingMomentItem.post_feeling = feelingGroup?.id;
+    setFeeling(feelingGroup?.emoji);
+  };
+  const emojis = [];
+  const cols = 9;
+  for (let i = 0; i < avaliableFeelings?.length; i += cols) {
+    emojis.push(avaliableFeelings.slice(i, i + cols));
+  }
+  return (
+    <>
+      <Button
+        title="情绪"
+        style={{ paddingInline: 1, paddingTop: 0, paddingBottom: 0, fontSize: 20 }}
+        icon={feeling ? undefined : <SmileOutlined style={{ fontSize: 20 }} />}
+        onClick={() => setModalOpen(!isModalOpen)}
+      >
+        {feeling}
+      </Button>
+      <Modal
+        width={9 * 40}
+        bodyStyle={{ paddingTop: 20 }}
+        open={isModalOpen}
+        footer={false}
+        onCancel={() => {
+          setModalOpen(false);
+        }}
+      >
+        {emojis.map((row, index) => {
+          return (
+            <Space key={index}>
+              {row.map((item) => {
+                if (item.id === 0) {
+                  return (
+                    <span key={item.id}>
+                      <SmileOutlined
+                        key={item.id}
+                        style={{
+                          paddingTop: 5,
+                          marginLeft: 7,
+                          fontSize: 20,
+                        }}
+                        onClick={() => onChange(item)}
+                      />
+                    </span>
+                  );
+                }
+                return (
+                  <span
+                    title={item.name}
+                    key={item.id}
+                    style={{ fontSize: 20 }}
+                    onClick={() => onChange(item)}
+                  >
+                    {item.emoji}
+                  </span>
+                );
+              })}
+            </Space>
+          );
+        })}
+      </Modal>
+    </>
+  );
+};
+
+const MomentForm = ({
+  onCreated,
+  feelings,
+}: {
+  onCreated: CreateFunction;
+  feelings: Moment.FeelingGroup[];
+}) => {
   const [form] = Form.useForm();
   const [tags, setTags] = useState<string[]>([]);
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
+  const [enableLocation, setEnableLocation] = useState<boolean>(true);
 
-  const onFinish = (values: Store) => {
+  function onLocationChanged(enable: boolean) {
+    if (enable) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        console.log('position: ', position);
+        EditingMomentItem.extra = {
+          ...EditingMomentItem.extra,
+          location: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          },
+        };
+        setEnableLocation(enable);
+      });
+    } else {
+      EditingMomentItem.extra = {
+        ...EditingMomentItem.extra,
+        location: null,
+      };
+      setEnableLocation(enable);
+    }
+  }
+
+  useEffect(() => {
+    onLocationChanged(enableLocation);
+  }, [enableLocation]);
+
+  const onFinish = async (values: Store) => {
     const content = values['content'].replace(/#[^\s#]+/g, '').trimStart();
     const moment = { ...EditingMomentItem, content: content };
 
@@ -210,6 +331,11 @@ const MomentForm = ({ onCreated }: { onCreated: CreateFunction }) => {
     );
   };
 
+  let locationTitle = '记录位置';
+  if (enableLocation && EditingMomentItem.extra?.location) {
+    locationTitle = `经度: ${EditingMomentItem.extra.location.latitude}\n纬度: ${EditingMomentItem.extra.location.longitude}`;
+  }
+
   return (
     <Form name="MomentForm" onFinish={onFinish} form={form}>
       <div style={{ marginBottom: '5px' }}>
@@ -253,96 +379,33 @@ const MomentForm = ({ onCreated }: { onCreated: CreateFunction }) => {
                 defaultValue={EditingMomentItem.event_time}
                 onChanged={onMomentDateTimeChanged}
               ></MomentDateTimePicker>
-              <Button type="primary" icon={<EnvironmentOutlined />} />
-              <Button icon={<SmileOutlined />} />
-              <Button icon={<PictureOutlined />} onClick={onUploadClick}></Button>
+              <Button
+                type={enableLocation ? 'primary' : 'default'}
+                icon={<EnvironmentOutlined />}
+                onClick={() => {
+                  onLocationChanged(!enableLocation);
+                }}
+                title={locationTitle}
+              />
+              {/* <Button icon={<SmileOutlined />} /> */}
+              <FeelingPicker avaliableFeelings={feelings}></FeelingPicker>
+              <Button
+                icon={<PictureOutlined style={{ fontSize: 20 }} />}
+                onClick={onUploadClick}
+              ></Button>
             </Space>
           </Col>
           <Col>
-            <Button type="primary" htmlType="submit" icon={<SendOutlined />}></Button>
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<SendOutlined />}
+              disabled={false}
+            ></Button>
           </Col>
         </Row>
       </Form.Item>
     </Form>
-  );
-};
-
-const MomentTimeline = ({ moments }: { moments: Moment.Item[]; onCreated: CreateFunction }) => {
-  const items = moments.map((e) => ({
-    label: e.event_time.split(' ')[1].slice(0, 5),
-    children: e.content,
-  }));
-  return <Timeline mode="left" items={items} />;
-};
-
-const DayMomentList = ({ moments }: { moments: Moment.Item[] }) => {
-  return (
-    <ProList<Moment.Item>
-      rowKey="id"
-      dataSource={moments}
-      // showActions="hover"
-      // editable={{
-      //   onSave: async (key, record, originRow) => {
-      //     console.log(key, record, originRow);
-      //     return true;
-      //   },
-      // }}
-      // onDataSourceChange={setDataSource}
-      metas={{
-        title: {
-          dataIndex: 'content',
-        },
-        avatar: {
-          // dataIndex: 'feeling',
-          editable: false,
-          render: (dom, entity) => {
-            return entity.feeling?.emoji;
-          },
-        },
-        description: {
-          dataIndex: 'desc',
-          render: (dom, entity) => {
-            let media;
-            console.log(entity.medias);
-            if (entity.medias) {
-              media = entity.medias.map((media) => (
-                <Image key={media.id} src={media.uri} width={100} height={100} />
-              ));
-            }
-            return (
-              <>
-                <Space>{media}</Space>
-
-                <Row justify="space-between">
-                  <Col span={10}>
-                    <Space>
-                      <span>{entity.event_time.split(' ')[1].slice(0, 5)}</span>
-                    </Space>
-                  </Col>
-                  <Col>
-                    {entity.tags.map((tag) => (
-                      <Tag key={tag.id} color={tag.color ?? '#5BD8A6'}>
-                        {tag.name}
-                      </Tag>
-                    ))}
-                  </Col>
-                </Row>
-              </>
-            );
-          },
-        },
-        // subTitle: {
-        //   render: () => {
-        //     return (
-        //       <Space size={0}>
-        //         <Tag color="blue">Ant Design</Tag>
-        //         <Tag color="#5BD8A6">TechUI</Tag>
-        //       </Space>
-        //     );
-        //   },
-        // },
-      }}
-    />
   );
 };
 
@@ -375,7 +438,8 @@ const MomentPage = () => {
   }
   const feelingSelectValue: Json = {};
   for (const feeling of momentGroup.feeling ?? []) {
-    feelingSelectValue[feeling.feeling__emoji] = feeling.feeling__emoji;
+    feelingSelectValue[feeling.emoji] =
+      feeling.id === 0 ? '空' : `${feeling.emoji}(${feeling.name})`;
   }
   const tagSelectValue: Json = {};
   for (const tag of momentGroup.tag ?? []) {
@@ -386,7 +450,7 @@ const MomentPage = () => {
 
   return (
     <>
-      <MomentForm onCreated={OnMomentCreated}></MomentForm>
+      <MomentForm onCreated={OnMomentCreated} feelings={momentGroup.feeling ?? []}></MomentForm>
       <ProList<Moment.Item>
         actionRef={listRef}
         rowKey="event_time"
@@ -436,7 +500,7 @@ const MomentPage = () => {
           console.log('params:', params);
           queryParams.tag = params['tags'];
           queryParams.month = params['month'];
-          queryParams.content__contains = params['content'];
+          queryParams.content__contains = params['subTitle'];
           queryParams.feeling__emoji = params['avatar'];
           queryParams.page = 1;
           refreshMoments();
@@ -449,9 +513,38 @@ const MomentPage = () => {
             valueEnum: monthSelectValueEnum,
           },
           title: {
-            dataIndex: 'content',
+            // dataIndex: 'content',
             valueType: 'text',
             title: '内容',
+            render: (dom, entity) => {
+              let location = entity.extra.location;
+              let device = extractBrowser(entity.extra.device?.ua);
+
+              if (device) {
+                device = <span title={entity.extra.device?.ip}>{device}</span>;
+              }
+              let info = device;
+              if (location) {
+                info = (
+                  <Space>
+                    <EnvironmentOutlined
+                      title={`经度: ${location.latitude}\n纬度: ${location.longitude}`}
+                    />
+                    {device}
+                  </Space>
+                );
+              }
+              return (
+                <Row justify="space-between">
+                  <Col>
+                    <Space>
+                      <p>{entity.content}</p>
+                    </Space>
+                  </Col>
+                  <Col>{info}</Col>
+                </Row>
+              );
+            },
           },
           avatar: {
             // dataIndex: 'feeling',
@@ -484,7 +577,7 @@ const MomentPage = () => {
                   <Space>{media}</Space>
 
                   <Row justify="space-between">
-                    <Col span={10}>
+                    <Col>
                       <Space>
                         <span>{entity.event_time.split(' ')[1].slice(0, 5)}</span>
                       </Space>
@@ -501,117 +594,27 @@ const MomentPage = () => {
               );
             },
           },
+
+          // subTitle: {
+          //   render: (dom, entity) => {
+          //     let location = entity.extra.location;
+          //     let device = extractBrowser(entity.extra.device?.ua);
+          //     if(device){
+          //       device = <span title={entity.extra.device?.ip}>{device}</span>
+          //     }
+          //     if(location){
+          //       return <Space>
+          //         <EnvironmentOutlined title={`经度: ${location.latitude}\n纬度: ${location.longitude}`} />
+          //         {device}
+          //       </Space>
+          //     }
+          //     return device;
+          //   }
+          // }
         }}
       ></ProList>
     </>
   );
 };
-
-// const MomentPage = () => {
-//   // Moments.sort((a, b) => (b.date.localeCompare(a.date)));
-//   const [moments, setMoments] = useState<Moment.Item[]>([]);
-//   const [expandedRowKeys, setExpandedRowKeys] = useState<readonly Key[]>([]);
-//   // const [month] = useState<string>(DayJS().format('YYYY-MM'));
-//   const [momentGroup, setMomentGroup] = useState<Moment.Group>({});
-
-//   const dayiyMoment: Moment.DailyMoment[] = toDailyMoment(moments);
-
-//   const OnMomentCreated = (moment: Moment.Item) => {
-//     setMoments([moment, ...moments]);
-//   };
-
-//   function requestGroupMoments(month?: string) {
-//     requestMoments({ month: month }).then((response) => {
-//       setMoments(response.results);
-//       if (response.results.length > 0) {
-//         setExpandedRowKeys([response.results[0].event_time.split(' ')[0]]);
-//       }
-//     });
-//   }
-
-//   useEffect(() => {
-//     requestMomentsGroup().then((momentGroup) => {
-//       setMomentGroup(momentGroup);
-//       requestGroupMoments(momentGroup.month?.[0]?.month);
-//     });
-//   }, []);
-
-//   function onMonthChanged(month: DayJS.Dayjs | null) {
-//     requestGroupMoments(month?.format('YYYY-MM'));
-//   }
-
-//   function disabledDate(current: DayJS.Dayjs) {
-//     // Can not select days before today and today
-//     // return current && current > DayJS().endOf('day');
-//     for (const group of momentGroup.month ?? []) {
-//       if (group.month === current.format('YYYY-MM')) {
-//         return false;
-//       }
-//     }
-//     return true;
-//   }
-//   return (
-//     <>
-//       <MomentForm onCreated={OnMomentCreated}></MomentForm>
-//       <Space>
-//         <DatePicker
-//           onChange={onMonthChanged}
-//           picker="month"
-//           disabledDate={disabledDate}
-//           format={'YYYY年MM月'}
-//         />
-//       </Space>
-//       <ProList<Moment.DailyMoment>
-//         rowKey="date"
-//         // headerTitle="支持展开的列表"
-//         // actionRef={}
-//         // search={{}}
-//         // pagination={{
-//         //   defaultPageSize: 5,
-//         //   showSizeChanger: true,
-//         //   pageSize: 5,
-//         //   total: moments.length,
-//         //   onChange(page, pageSize) {
-//         //     console.log("page", page, pageSize)
-//         //   },
-//         // }}
-//         expandable={{
-//           onExpandedRowsChange: setExpandedRowKeys,
-//           // expandRowByClick: true,
-//           expandedRowKeys: expandedRowKeys,
-//         }}
-//         dataSource={dayiyMoment}
-//         metas={{
-//           title: { render: (dom, item) => item.date, dataIndex: 'date', title: '日期' },
-//           description: {
-//             render: (dom, item) => {
-//               return (
-//                 <div style={{ marginTop: 20 }}>
-//                   <DayMomentList moments={item.moments}></DayMomentList>
-//                   {/* <MomentTimeline
-//                     moments={item.moments}
-//                     onCreated={OnMomentCreated}
-//                   ></MomentTimeline> */}
-//                 </div>
-//               );
-//             },
-//           },
-//           // avatar: {},
-//           content: {},
-//           actions: {},
-//           subTitle: {
-//             render: (dom, item) => {
-//               return (
-//                 <Space size={0}>
-//                   <Tag color="blue">{item.moments.length} moments</Tag>
-//                 </Space>
-//               );
-//             },
-//           },
-//         }}
-//       />
-//     </>
-//   );
-// };
 
 export default MomentPage;
