@@ -45,11 +45,18 @@ export async function createMoment(
   });
 }
 
-export async function deleteMoment(
-  id: Key,
+export async function deleteMoments(
+  momentIds?: Key | Key[] | null,
   options?: { [key: string]: any },
-): Promise<Moment.Item> {
-  return request('http://127.0.0.1:8002/event/moment/${id}/', {
+): Promise<Moment.Item[]> {
+  if (!momentIds) {
+    return [];
+  }
+  if (!Array.isArray(momentIds)) {
+    momentIds = [momentIds];
+  }
+  return request('http://127.0.0.1:8002/event/moment/', {
+    params: { 'objects-ids': momentIds },
     method: 'DELETE',
     ...(options || {}),
   });

@@ -1,4 +1,9 @@
-import { createMoment, requestMoments, requestMomentsGroup } from '@/services/event/moment';
+import {
+  createMoment,
+  deleteMoments,
+  requestMoments,
+  requestMomentsGroup,
+} from '@/services/event/moment';
 import { uploadToQiNiu, uploadToServer } from '@/services/media/qiniu_clound';
 import {
   ChromeFilled,
@@ -14,7 +19,7 @@ import { UploadChangeParam, UploadFile } from 'antd/lib/upload';
 import DayJS from 'dayjs';
 import MomentUtil from 'moment';
 import type { UploadRequestOption } from 'rc-upload/lib/interface';
-import type { ChangeEventHandler } from 'react';
+import type { ChangeEventHandler, Key } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 function toDailyMoment(moments: Moment.Item[]) {
@@ -53,7 +58,7 @@ const EditingMomentItem: Moment.FormItem & {
     this.tags = '';
     this.feeling = null;
     this.post_medias = [];
-    this.extra = {};
+    // this.extra = {};
   },
 };
 
@@ -414,6 +419,8 @@ const MomentPage = () => {
   const [momentGroup, setMomentGroup] = useState<Moment.Group>({});
   const [queryParams] = useState<Moment.QueryParams>({ page: 1, page_size: 10 });
   const [totalNum, setTotalNum] = useState<number>(0);
+  const [selectable, setSelectable] = useState<boolean>(true);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
 
   const OnMomentCreated = (moment: Moment.Item) => {
     setMoments([moment, ...moments]);
@@ -438,30 +445,95 @@ const MomentPage = () => {
   }
   const feelingSelectValue: Json = {};
   for (const feeling of momentGroup.feeling ?? []) {
-    feelingSelectValue[feeling.emoji] =
-      feeling.id === 0 ? '空' : `${feeling.emoji}(${feeling.name})`;
+    if (feeling.count > 0) {
+      feelingSelectValue[feeling.emoji] =
+        feeling.id === 0 ? '空' : `${feeling.emoji}(${feeling.name})`;
+    }
   }
   const tagSelectValue: Json = {};
   for (const tag of momentGroup.tag ?? []) {
     tagSelectValue[tag.tags__name] = tag.tags__name;
   }
-  const listRef = useRef();
-  const formRef = useRef();
 
   return (
     <>
       <MomentForm onCreated={OnMomentCreated} feelings={momentGroup.feeling ?? []}></MomentForm>
       <ProList<Moment.Item>
-        actionRef={listRef}
-        rowKey="event_time"
-        formRef={formRef}
+        rowKey="id"
+        // split={true}
+        // options={{}}
+        toolBarRender={(action, rows) => {
+          if (selectable) {
+            return [
+              <Button
+                key={'select_all'}
+                onClick={() => {
+                  setSelectedRowKeys(moments.map((e) => e.id));
+                }}
+              >
+                全选
+              </Button>,
+              <Button
+                danger
+                type="primary"
+                onClick={() => {
+                  deleteMoments(rows.selectedRowKeys);
+                }}
+                key={'delete'}
+                disabled={(rows.selectedRowKeys?.length ?? 0) === 0}
+              >
+                删除
+              </Button>,
+            ];
+          }
+          return [];
+        }}
         search={{
           filterType: 'query',
           collapsed: false,
           span: 4,
           split: false,
           labelWidth: 'auto',
+          optionRender: (searchConfig, props, dom) => {
+            const a = (
+              <Button
+                key={'manage'}
+                onClick={() => {
+                  setSelectable(!selectable);
+                }}
+              >
+                管理
+              </Button>
+            );
+            return [a, ...dom];
+          },
         }}
+        rowSelection={
+          selectable
+            ? {
+                selectedRowKeys,
+                hideSelectAll: false,
+                alwaysShowAlert: false,
+                selections: [
+                  {
+                    key: 'Select All',
+                    onSelect: (keys) => {
+                      console.log('dosnad', keys);
+                    },
+                    text: 'hello',
+                  },
+                ],
+                columnTitle: (
+                  <>
+                    <span>what happen</span>
+                  </>
+                ),
+                onChange: (keys: Key[]) => {
+                  setSelectedRowKeys(keys);
+                },
+              }
+            : false
+        }
         // request={async (params = {}) => {
         //   queryParams.page = params.current;
         //   queryParams.page_size = params.pageSize;
@@ -496,16 +568,48 @@ const MomentPage = () => {
             // });
           },
         }}
+        // toolbar={{actions: [
+        //   <Button key="primary">新建</Button>
+        // ]}}
         onSubmit={(params) => {
           console.log('params:', params);
           queryParams.tag = params['tags'];
           queryParams.month = params['month'];
-          queryParams.content__contains = params['subTitle'];
+          queryParams.content__contains = params['title'];
           queryParams.feeling__emoji = params['avatar'];
           queryParams.page = 1;
           refreshMoments();
         }}
         dataSource={moments}
+        itemTitleRender={(item) => {
+          let location = item.extra.location;
+          let device = extractBrowser(item.extra.device?.ua);
+
+          if (device) {
+            device = <span title={item.extra.device?.ip}>{device}</span>;
+          }
+          let info = device;
+          if (location) {
+            info = (
+              <Space>
+                <EnvironmentOutlined
+                  title={`经度: ${location.latitude}\n纬度: ${location.longitude}`}
+                />
+                {device}
+              </Space>
+            );
+          }
+          return (
+            <Row justify="space-between">
+              <Col>
+                <Space>
+                  <p>{item.content}</p>
+                </Space>
+              </Col>
+              <Col>{info}</Col>
+            </Row>
+          );
+        }}
         metas={{
           month: {
             title: '年月',
@@ -513,38 +617,8 @@ const MomentPage = () => {
             valueEnum: monthSelectValueEnum,
           },
           title: {
-            // dataIndex: 'content',
             valueType: 'text',
             title: '内容',
-            render: (dom, entity) => {
-              let location = entity.extra.location;
-              let device = extractBrowser(entity.extra.device?.ua);
-
-              if (device) {
-                device = <span title={entity.extra.device?.ip}>{device}</span>;
-              }
-              let info = device;
-              if (location) {
-                info = (
-                  <Space>
-                    <EnvironmentOutlined
-                      title={`经度: ${location.latitude}\n纬度: ${location.longitude}`}
-                    />
-                    {device}
-                  </Space>
-                );
-              }
-              return (
-                <Row justify="space-between">
-                  <Col>
-                    <Space>
-                      <p>{entity.content}</p>
-                    </Space>
-                  </Col>
-                  <Col>{info}</Col>
-                </Row>
-              );
-            },
           },
           avatar: {
             // dataIndex: 'feeling',
